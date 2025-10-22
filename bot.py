@@ -39,14 +39,12 @@ FEATURE_STATUS = {
 
 BAD_WORDS = [
     "fuck", "fucking", "fucked", "fucker", "fck", "f*ck",
-    "shit", "shitty", "shitting", "bullshit", "horseshit"
-    , "bitch", "bitching", "bastard", "asshole",
-    "ass",
-   ,"dick", "cock", "penis", "pussy",
+    "shit", "shitty", "shitting", "bullshit", "horseshit",
+    "bitch", "bitching", "bastard", "asshole",
+    "ass","dick", "cock", "penis", "pussy",
     "vagina", "cunt", "whore", "slut", "hoe", "prostitute",
     "nigger", "nigga", "negro", "n*gger", "n*gga",
     "fag", "faggot", "f*ggot", "dyke", "retard", "retarded",
-    
     "terrorist", "rape", "raping", "rapist",
     "kill yourself", "kys", "suicide", "cancer", "aids",
     "holocaust", "dork", "nazi", "hitler", "slave", "slavery"
