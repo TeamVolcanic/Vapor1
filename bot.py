@@ -589,6 +589,98 @@ async def _send_ai_response(interaction: discord.Interaction, prompt: str, ai_ty
     }
     save_data()
 
+@bot.tree.command(name="info", description="Display bot information and available commands")
+async def info(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🤖 Server Management Bot",
+        description="A comprehensive Discord bot designed to help you manage your server efficiently with moderation tools, ticket systems, AI features, and automated protection.",
+        color=discord.Color.blue()
+    )
+    
+    embed.add_field(
+        name="🛡️ Moderation Commands",
+        value=(
+            "`/kick` - Remove a member from the server\n"
+            "`/ban` - Ban a member from the server\n"
+            "`/timeout` - Temporarily timeout a member\n"
+            "`/warn` - Issue a warning to a user\n"
+            "`/clearwarnings` - Clear all warnings for a user\n"
+            "`/checkwarnings` - Check warnings for a user"
+        ),
+        inline=False
+    )
+    
+    embed.add_field(
+        name="🎫 Ticket System",
+        value=(
+            "`/ticketpanel` - Create an interactive ticket panel\n"
+            "`/closeticket` - Close the current ticket\n"
+            "`/addsupportrole` - Add a support role for tickets\n"
+            "`/removesupportrole` - Remove a support role\n"
+            "`/listsupportroles` - List all support roles"
+        ),
+        inline=False
+    )
+    
+    embed.add_field(
+        name="🤖 AI Commands",
+        value=(
+            "`/ask` - Ask the AI a question\n"
+            "`/generate` - Generate creative text with AI (Admin)\n"
+            "`/prompt` - Get a structured AI response (Admin)"
+        ),
+        inline=False
+    )
+    
+    embed.add_field(
+        name="✉️ Direct Messaging",
+        value=(
+            "`/dm` - Send a private message to a member (Admin)\n"
+            "`/dmeveryone` - Broadcast a message to all members (Admin)"
+        ),
+        inline=False
+    )
+    
+    embed.add_field(
+        name="📝 Custom Commands",
+        value=(
+            "`/setcommand` - Create a custom command (Admin)\n"
+            "`/deletecommand` - Delete a custom command (Admin)\n"
+            "`/listcommands` - View all custom commands"
+        ),
+        inline=False
+    )
+    
+    embed.add_field(
+        name="✅ Verification System",
+        value=(
+            "`/setupverify` - Set up member verification (Admin)\n"
+            "`/verify` - Verify yourself to gain access"
+        ),
+        inline=False
+    )
+    
+    embed.add_field(
+        name="🛡️ Auto-Moderation Features",
+        value=(
+            "**Cursing Detection** - Automatically removes inappropriate language and times out offenders (5 min)\n"
+            "**Spam Protection** - Detects and times out users who spam messages (10 min)\n"
+            "**Real-time Protection** - Keeps your server safe 24/7"
+        ),
+        inline=False
+    )
+    
+    embed.add_field(
+        name="⚙️ Server Management",
+        value="`/sync` - Sync slash commands to the server (Admin)",
+        inline=False
+    )
+    
+    embed.set_footer(text="Commands marked with (Admin) require Administrator permissions")
+    embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
+    
+    await interaction.response.send_message(embed=embed)
+
 @bot.tree.command(name="ask", description="Ask the AI a question")
 async def ask(interaction: discord.Interaction, question: str):
     await _send_ai_response(interaction, question, 'ask', 500, 0.7)
@@ -603,51 +695,85 @@ async def generate(interaction: discord.Interaction, prompt: str):
 async def prompt_cmd(interaction: discord.Interaction, user_prompt: str):
     await _send_ai_response(interaction, user_prompt, 'prompt', 600, 0.8)
 
-@bot.tree.command(name="info", description="Display bot information")
-async def info(interaction: discord.Interaction):
-    if not FEATURE_STATUS.get('info'):
-        await interaction.response.send_message("❌ This command is currently disabled.", ephemeral=True)
-        return
-
-    if not hasattr(bot, 'start_time'):
-        await interaction.response.send_message("❌ Bot startup information not available yet.", ephemeral=True)
-        return
-
-    uptime = discord.utils.utcnow() - bot.start_time
-    days = uptime.days
-    hours, remainder = divmod(uptime.seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
-
-    uptime_str = f"{days}d {hours}h {minutes}m {seconds}s"
-
+@bot.tree.command(name="setcommand", description="Set a custom command response (Admin only)")
+@app_commands.checks.has_permissions(administrator=True)
+async def setcommand(interaction: discord.Interaction, command_name: str, response_text: str):
+    channel_id = interaction.channel_id
+    
+    if channel_id not in prompt_messages:
+        prompt_messages[channel_id] = {}
+    
+    prompt_messages[channel_id][command_name] = {
+        'type': 'custom',
+        'user_id': interaction.user.id,
+        'prompt': response_text
+    }
+    save_data()
+    
     embed = discord.Embed(
-        title="🤖 Bot Information",
+        title="✅ Custom Command Created",
+        description=f"Command `{command_name}` has been set!",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="Response", value=response_text[:1024], inline=False)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.tree.command(name="deletecommand", description="Delete a custom command (Admin only)")
+@app_commands.checks.has_permissions(administrator=True)
+async def deletecommand(interaction: discord.Interaction, command_name: str):
+    channel_id = interaction.channel_id
+    
+    if channel_id in prompt_messages and command_name in prompt_messages[channel_id]:
+        del prompt_messages[channel_id][command_name]
+        save_data()
+        
+        embed = discord.Embed(
+            title="✅ Custom Command Deleted",
+            description=f"Command `{command_name}` has been removed.",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    else:
+        await interaction.response.send_message(f"❌ Command `{command_name}` not found.", ephemeral=True)
+
+@bot.tree.command(name="listcommands", description="List all custom commands")
+async def listcommands(interaction: discord.Interaction):
+    channel_id = interaction.channel_id
+    
+    if channel_id not in prompt_messages or not prompt_messages[channel_id]:
+        await interaction.response.send_message("❌ No custom commands found in this channel.", ephemeral=True)
+        return
+    
+    embed = discord.Embed(
+        title="📝 Custom Commands",
+        description="Here are all the custom commands in this channel:",
         color=discord.Color.blue()
     )
-    embed.add_field(name="Bot Name", value=bot.user.name, inline=True)
-    embed.add_field(name="Bot ID", value=bot.user.id, inline=True)
-    embed.add_field(name="Uptime", value=uptime_str, inline=True)
-    embed.add_field(name="Servers", value=len(bot.guilds), inline=True)
-    embed.add_field(name="Discord.py Version", value=discord.__version__, inline=True)
     
-    ai_status = "✅ Enabled" if (openai_client or gemini_client) else "❌ Disabled"
-    embed.add_field(name="AI Features", value=ai_status, inline=True)
+    for cmd_name, cmd_data in prompt_messages[channel_id].items():
+        if isinstance(cmd_name, str) and cmd_data.get('type') == 'custom':
+            response = cmd_data.get('prompt', 'No response')
+            embed.add_field(
+                name=f"`{cmd_name}`",
+                value=response[:100] + "..." if len(response) > 100 else response,
+                inline=False
+            )
     
-    embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
-    embed.set_footer(text=f"Requested by {interaction.user.display_name}")
-
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="kick", description="Kick a member from the server")
+@bot.tree.command(name="kick", description="Kick a member from the server (Admin only)")
 @app_commands.checks.has_permissions(kick_members=True)
 async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
     if not FEATURE_STATUS.get('kick'):
-        await interaction.response.send_message("❌ This command is currently disabled.", ephemeral=True)
+        await interaction.response.send_message("❌ This feature is currently disabled.", ephemeral=True)
+        return
+
+    if member.top_role >= interaction.user.top_role:
+        await interaction.response.send_message("❌ You cannot kick this member (role hierarchy).", ephemeral=True)
         return
 
     try:
         await member.kick(reason=reason)
-        
         embed = discord.Embed(
             title="👢 Member Kicked",
             description=f"{member.mention} has been kicked from the server.",
@@ -659,16 +785,19 @@ async def kick(interaction: discord.Interaction, member: discord.Member, reason:
     except Exception as e:
         await interaction.response.send_message(f"❌ Failed to kick member: {e}", ephemeral=True)
 
-@bot.tree.command(name="ban", description="Ban a member from the server")
+@bot.tree.command(name="ban", description="Ban a member from the server (Admin only)")
 @app_commands.checks.has_permissions(ban_members=True)
 async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
     if not FEATURE_STATUS.get('ban'):
-        await interaction.response.send_message("❌ This command is currently disabled.", ephemeral=True)
+        await interaction.response.send_message("❌ This feature is currently disabled.", ephemeral=True)
+        return
+
+    if member.top_role >= interaction.user.top_role:
+        await interaction.response.send_message("❌ You cannot ban this member (role hierarchy).", ephemeral=True)
         return
 
     try:
         await member.ban(reason=reason)
-        
         embed = discord.Embed(
             title="🔨 Member Banned",
             description=f"{member.mention} has been banned from the server.",
@@ -680,297 +809,194 @@ async def ban(interaction: discord.Interaction, member: discord.Member, reason: 
     except Exception as e:
         await interaction.response.send_message(f"❌ Failed to ban member: {e}", ephemeral=True)
 
-@bot.tree.command(name="unban", description="Unban a user from the server")
-@app_commands.checks.has_permissions(ban_members=True)
-async def unban(interaction: discord.Interaction, user_id: str):
-    try:
-        user_id_int = int(user_id)
-        user = await bot.fetch_user(user_id_int)
-        
-        await interaction.guild.unban(user, reason=f"Unbanned by {interaction.user.display_name}")
-        
-        embed = discord.Embed(
-            title="✅ User Unbanned",
-            description=f"**{user.name}** (ID: {user_id}) has been unbanned from the server.",
-            color=discord.Color.green()
-        )
-        embed.set_footer(text=f"Unbanned by {interaction.user.display_name}")
-        await interaction.response.send_message(embed=embed)
-    except ValueError:
-        await interaction.response.send_message("❌ Invalid user ID. Please provide a valid numeric user ID.", ephemeral=True)
-    except discord.NotFound:
-        await interaction.response.send_message("❌ User not found or not banned.", ephemeral=True)
-    except Exception as e:
-        await interaction.response.send_message(f"❌ Failed to unban user: {e}", ephemeral=True)
-
-@bot.tree.command(name="timeout", description="Timeout a member temporarily")
+@bot.tree.command(name="timeout", description="Timeout a member (Admin only)")
 @app_commands.checks.has_permissions(moderate_members=True)
 async def timeout(interaction: discord.Interaction, member: discord.Member, duration: int, reason: str = "No reason provided"):
     if not FEATURE_STATUS.get('timeout'):
-        await interaction.response.send_message("❌ This command is currently disabled.", ephemeral=True)
+        await interaction.response.send_message("❌ This feature is currently disabled.", ephemeral=True)
+        return
+
+    if member.top_role >= interaction.user.top_role:
+        await interaction.response.send_message("❌ You cannot timeout this member (role hierarchy).", ephemeral=True)
         return
 
     try:
         timeout_until = discord.utils.utcnow() + datetime.timedelta(minutes=duration)
         await member.timeout(timeout_until, reason=reason)
-
+        
         embed = discord.Embed(
             title="⏱️ Member Timed Out",
             description=f"{member.mention} has been timed out.",
             color=discord.Color.orange()
         )
-        embed.add_field(name="Duration", value=f"{duration} minutes", inline=False)
+        embed.add_field(name="Duration", value=f"{duration} minutes", inline=True)
         embed.add_field(name="Reason", value=reason, inline=False)
         embed.set_footer(text=f"Timed out by {interaction.user.display_name}")
         await interaction.response.send_message(embed=embed)
     except Exception as e:
         await interaction.response.send_message(f"❌ Failed to timeout member: {e}", ephemeral=True)
 
-@bot.tree.command(name="untimeout", description="Remove timeout from a member")
+@bot.tree.command(name="warn", description="Warn a user (Admin only)")
 @app_commands.checks.has_permissions(moderate_members=True)
-async def untimeout(interaction: discord.Interaction, member: discord.Member):
-    try:
-        if member.timed_out_until is None:
-            await interaction.response.send_message(f"❌ {member.mention} is not currently timed out.", ephemeral=True)
-            return
-        
-        await member.timeout(None, reason=f"Timeout removed by {interaction.user.display_name}")
-        
-        embed = discord.Embed(
-            title="✅ Timeout Removed",
-            description=f"{member.mention}'s timeout has been removed.",
-            color=discord.Color.green()
-        )
-        embed.set_footer(text=f"Timeout removed by {interaction.user.display_name}")
-        await interaction.response.send_message(embed=embed)
-    except Exception as e:
-        await interaction.response.send_message(f"❌ Failed to remove timeout: {e}", ephemeral=True)
-
-@bot.tree.command(name="warn", description="Issue a warning to a member")
-@app_commands.checks.has_permissions(kick_members=True)
 async def warn(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
     if not FEATURE_STATUS.get('warn'):
-        await interaction.response.send_message("❌ This command is currently disabled.", ephemeral=True)
+        await interaction.response.send_message("❌ This feature is currently disabled.", ephemeral=True)
         return
 
     user_id = member.id
+    
     if user_id not in user_warnings:
         user_warnings[user_id] = []
-
+    
     warning_data = {
         'reason': reason,
-        'warned_by': interaction.user.id,
-        'timestamp': datetime.datetime.now().isoformat()
+        'moderator': interaction.user.id,
+        'timestamp': datetime.datetime.now().isoformat(),
+        'guild_id': interaction.guild.id
     }
+    
     user_warnings[user_id].append(warning_data)
-
-    total_warnings = len(user_warnings[user_id])
-
+    warning_count = len(user_warnings[user_id])
+    
     embed = discord.Embed(
-        title="⚠️ Member Warned",
+        title="⚠️ Warning Issued",
         description=f"{member.mention} has been warned.",
         color=discord.Color.yellow()
     )
     embed.add_field(name="Reason", value=reason, inline=False)
-    embed.add_field(name="Total Warnings", value=str(total_warnings), inline=False)
+    embed.add_field(name="Total Warnings", value=str(warning_count), inline=True)
     embed.set_footer(text=f"Warned by {interaction.user.display_name}")
+    
     await interaction.response.send_message(embed=embed)
-
+    
     try:
         dm_embed = discord.Embed(
-            title="⚠️ Warning",
-            description=f"You have been warned in **{interaction.guild.name}**.",
+            title="⚠️ You have been warned",
+            description=f"You received a warning in **{interaction.guild.name}**",
             color=discord.Color.yellow()
         )
         dm_embed.add_field(name="Reason", value=reason, inline=False)
-        dm_embed.add_field(name="Total Warnings", value=str(total_warnings), inline=False)
+        dm_embed.add_field(name="Total Warnings", value=str(warning_count), inline=True)
         await member.send(embed=dm_embed)
     except:
         pass
 
-@bot.tree.command(name="warnings", description="View warnings for a member")
-@app_commands.checks.has_permissions(kick_members=True)
-async def warnings(interaction: discord.Interaction, member: discord.Member):
+@bot.tree.command(name="checkwarnings", description="Check warnings for a user")
+async def checkwarnings(interaction: discord.Interaction, member: discord.Member):
     user_id = member.id
+    
     if user_id not in user_warnings or not user_warnings[user_id]:
-        await interaction.response.send_message(f"{member.mention} has no warnings.", ephemeral=True)
+        await interaction.response.send_message(f"✅ {member.mention} has no warnings.", ephemeral=True)
         return
-
+    
     embed = discord.Embed(
         title=f"⚠️ Warnings for {member.display_name}",
+        description=f"Total warnings: {len(user_warnings[user_id])}",
         color=discord.Color.yellow()
     )
-
-    for i, warning in enumerate(user_warnings[user_id], 1):
-        warned_by = interaction.guild.get_member(warning['warned_by'])
-        warned_by_name = warned_by.display_name if warned_by else "Unknown"
-        timestamp = warning['timestamp'][:19]
-
+    
+    for i, warning in enumerate(user_warnings[user_id][:10], 1):
+        moderator = interaction.guild.get_member(warning['moderator'])
+        mod_name = moderator.display_name if moderator else "Unknown"
+        timestamp = warning.get('timestamp', 'Unknown time')
+        
         embed.add_field(
-            name=f"Warning #{i}",
-            value=f"**Reason:** {warning['reason']}\n**By:** {warned_by_name}\n**Date:** {timestamp}",
+            name=f"Warning {i}",
+            value=f"**Reason:** {warning['reason']}\n**By:** {mod_name}\n**Date:** {timestamp[:10]}",
             inline=False
         )
+    
+    if len(user_warnings[user_id]) > 10:
+        embed.set_footer(text=f"Showing 10 of {len(user_warnings[user_id])} warnings")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    await interaction.response.send_message(embed=embed)
-
-@bot.tree.command(name="clearwarnings", description="Clear all warnings for a member")
+@bot.tree.command(name="clearwarnings", description="Clear all warnings for a user (Admin only)")
 @app_commands.checks.has_permissions(administrator=True)
 async def clearwarnings(interaction: discord.Interaction, member: discord.Member):
     user_id = member.id
+    
     if user_id in user_warnings:
-        user_warnings[user_id] = []
-        await interaction.response.send_message(f"✅ All warnings cleared for {member.mention}.")
-    else:
-        await interaction.response.send_message(f"{member.mention} has no warnings to clear.", ephemeral=True)
-
-@bot.tree.command(name="verify", description="Get the Member role")
-async def verify(interaction: discord.Interaction):
-    if not interaction.guild:
-        await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
-        return
-
-    guild_id = interaction.guild.id
-    role_name = verify_roles.get(guild_id, DEFAULT_VERIFY_ROLE_NAME)
-    role = discord.utils.get(interaction.guild.roles, name=role_name)
-
-    if not role:
-        await interaction.response.send_message(f"❌ The verification role `{role_name}` does not exist. Please contact an admin.", ephemeral=True)
-        return
-
-    if role in interaction.user.roles:
-        await interaction.response.send_message(f"✅ You are already verified!", ephemeral=True)
-        return
-
-    try:
-        await interaction.user.add_roles(role)
-        embed = discord.Embed(
-            title="✅ Verification Successful",
-            description=f"{interaction.user.mention}, you have been verified and granted the {role.mention} role!",
-            color=discord.Color.green()
-        )
-        await interaction.response.send_message(embed=embed)
-    except Exception as e:
-        await interaction.response.send_message(f"❌ Failed to verify: {e}", ephemeral=True)
-
-@bot.tree.command(name="mverify", description="Manually verify a member by giving them the Member role (Admin only)")
-@app_commands.checks.has_permissions(administrator=True)
-async def mverify(interaction: discord.Interaction, member: discord.Member):
-    if not interaction.guild:
-        await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
-        return
-
-    guild_id = interaction.guild.id
-    role_name = verify_roles.get(guild_id, DEFAULT_VERIFY_ROLE_NAME)
-    role = discord.utils.get(interaction.guild.roles, name=role_name)
-
-    if not role:
-        await interaction.response.send_message(f"❌ The verification role `{role_name}` does not exist. Please contact an admin.", ephemeral=True)
-        return
-
-    if role in member.roles:
-        await interaction.response.send_message(f"❌ {member.mention} is already verified!", ephemeral=True)
-        return
-
-    try:
-        await member.add_roles(role)
-        embed = discord.Embed(
-            title="✅ Member Verified",
-            description=f"{member.mention} has been manually verified by {interaction.user.mention} and granted the {role.mention} role!",
-            color=discord.Color.green()
-        )
-        embed.set_footer(text=f"Verified by {interaction.user.display_name}")
-        await interaction.response.send_message(embed=embed)
+        del user_warnings[user_id]
         
-        try:
-            dm_embed = discord.Embed(
-                title="✅ Verified!",
-                description=f"You have been verified in **{interaction.guild.name}** by an administrator!",
-                color=discord.Color.green()
-            )
-            await member.send(embed=dm_embed)
-        except:
-            pass
-    except Exception as e:
-        await interaction.response.send_message(f"❌ Failed to verify member: {e}", ephemeral=True)
+        embed = discord.Embed(
+            title="✅ Warnings Cleared",
+            description=f"All warnings for {member.mention} have been cleared.",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed)
+    else:
+        await interaction.response.send_message(f"✅ {member.mention} has no warnings to clear.", ephemeral=True)
 
-@bot.tree.command(name="setverifyrole", description="Set the verification role name for this server (Admin only)")
+@bot.tree.command(name="setupverify", description="Setup verification system (Admin only)")
 @app_commands.checks.has_permissions(administrator=True)
-async def setverifyrole(interaction: discord.Interaction, role_name: str):
+async def setupverify(interaction: discord.Interaction, role: discord.Role = None):
     guild_id = interaction.guild.id
-    verify_roles[guild_id] = role_name
+    
+    if role:
+        verify_roles[guild_id] = role.id
+        role_name = role.name
+    else:
+        existing_role = discord.utils.get(interaction.guild.roles, name=DEFAULT_VERIFY_ROLE_NAME)
+        if not existing_role:
+            try:
+                existing_role = await interaction.guild.create_role(
+                    name=DEFAULT_VERIFY_ROLE_NAME,
+                    reason="Verification system setup"
+                )
+            except Exception as e:
+                await interaction.response.send_message(f"❌ Failed to create verification role: {e}", ephemeral=True)
+                return
+        
+        verify_roles[guild_id] = existing_role.id
+        role_name = existing_role.name
+    
     save_data()
     
     embed = discord.Embed(
-        title="✅ Verification Role Set",
-        description=f"The verification role has been set to: **{role_name}**\n\nMake sure this role exists in your server!",
+        title="✅ Verification System Setup",
+        description=f"Verification role set to: **{role_name}**\n\nUsers can now use `/verify` to get this role.",
         color=discord.Color.green()
     )
-    embed.set_footer(text=f"Set by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="feature", description="Enable or disable bot features (Admin only)")
-@app_commands.checks.has_permissions(administrator=True)
-@app_commands.describe(
-    action="Choose to enable or disable the feature",
-    feature="The feature to enable/disable"
-)
-@app_commands.choices(action=[
-    app_commands.Choice(name="Enable", value="enable"),
-    app_commands.Choice(name="Disable", value="disable")
-])
-@app_commands.choices(feature=[
-    app_commands.Choice(name="Info Command", value="info"),
-    app_commands.Choice(name="Kick Command", value="kick"),
-    app_commands.Choice(name="Ban Command", value="ban"),
-    app_commands.Choice(name="Timeout Command", value="timeout"),
-    app_commands.Choice(name="Cursing Filter", value="cursing"),
-    app_commands.Choice(name="Spam Protection", value="spamming"),
-    app_commands.Choice(name="DM Command", value="dm"),
-    app_commands.Choice(name="Warn Command", value="warn")
-])
-async def feature(interaction: discord.Interaction, action: str, feature: str):
-    if feature not in FEATURE_STATUS:
-        await interaction.response.send_message(f"❌ Invalid feature: {feature}", ephemeral=True)
+@bot.tree.command(name="verify", description="Verify yourself to gain access to the server")
+async def verify(interaction: discord.Interaction):
+    guild_id = interaction.guild.id
+    
+    if guild_id not in verify_roles:
+        await interaction.response.send_message("❌ Verification system is not set up on this server.", ephemeral=True)
         return
     
-    if action == "enable":
-        FEATURE_STATUS[feature] = True
-        status = "enabled"
-        color = discord.Color.green()
-        emoji = "✅"
-    else:
-        FEATURE_STATUS[feature] = False
-        status = "disabled"
-        color = discord.Color.red()
-        emoji = "🔒"
+    role = interaction.guild.get_role(verify_roles[guild_id])
     
-    feature_names = {
-        'info': 'Info Command',
-        'kick': 'Kick Command',
-        'ban': 'Ban Command',
-        'timeout': 'Timeout Command',
-        'cursing': 'Cursing Filter',
-        'spamming': 'Spam Protection',
-        'dm': 'DM Command',
-        'warn': 'Warn Command'
-    }
+    if not role:
+        await interaction.response.send_message("❌ Verification role not found. Please contact an administrator.", ephemeral=True)
+        return
     
-    embed = discord.Embed(
-        title=f"{emoji} Feature {status.capitalize()}",
-        description=f"The **{feature_names.get(feature, feature)}** has been {status}.",
-        color=color
-    )
-    embed.set_footer(text=f"Changed by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    if role in interaction.user.roles:
+        await interaction.response.send_message("✅ You are already verified!", ephemeral=True)
+        return
+    
+    try:
+        await interaction.user.add_roles(role, reason="User verified")
+        
+        embed = discord.Embed(
+            title="✅ Verification Successful",
+            description=f"Welcome! You have been verified and received the {role.mention} role.",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Failed to verify: {e}", ephemeral=True)
 
-@bot.tree.command(name="dm", description="Send a DM to a user (Admin only)")
+@bot.tree.command(name="dm", description="Send a DM to a specific member (Admin only)")
 @app_commands.checks.has_permissions(administrator=True)
 async def dm(interaction: discord.Interaction, member: discord.Member, message: str):
     if not FEATURE_STATUS.get('dm'):
-        await interaction.response.send_message("❌ This command is currently disabled.", ephemeral=True)
+        await interaction.response.send_message("❌ This feature is currently disabled.", ephemeral=True)
         return
-
+    
     try:
         embed = discord.Embed(
             title=f"📩 Message from {interaction.guild.name}",
